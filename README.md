@@ -2,27 +2,26 @@
 
 ## Web app available https://fusionfpv.com/prober
 
-Native CLI + GUI tool for flashing and configuring Bluejay ESC firmware over BLHeli 4-way passthrough (MSP). Supports single ESCs, 4-in-1 boards, and AIOs. Also includes a C2 flashing mode for direct SiLabs programming via Arduino.
+Tool for flashing and configuring Bluejay ESC firmware over BLHeli 4-way passthrough (MSP). Supports single ESCs, 4-in-1 ESCs and AIO boards, as well as direct C2 programming of SiLabs MCUs using an Arduino.
 
-Built in C++ with no runtime dependencies. Ships as a single portable binary (CLI) or Qt-based GUI.
+Written in C++ with a standalone CLI and a Qt GUI for Windows and Linux. The GUI shows flashing progress and status for each ESC, and can be used to read and edit settings.
 
----
+Download the native application from [Releases](https://github.com/leszczy/prober/releases), or use the [web version](https://fusionfpv.com/prober).
 
+## Installation
 
-## Install (Windows)
+### Windows
 
-Download the latest release from [GitHub Releases](https://github.com/hackrfstuff/prober/releases).
+There are two versions available in [Releases](https://github.com/leszczy/prober/releases).
 
-- **Installer** (`prober-x.x.x-setup.exe`) - installs to Program Files, creates Start Menu and desktop shortcuts, adds `prober` to system PATH, and auto-installs VC++ Redistributable if missing.
-- **Portable** (`prober-x.x.x-portable.zip`) - extract anywhere and run. VC++ Redistributable is included in the zip but must be installed separately if not already present.
+- Setup, which installs prober, creates shortcuts, adds `prober` to system PATH.
+- Portable, which to use you must extract the ZIP and run the application from the extracted folder, installing VC++ Redistributable if necessary.
 
-The GUI checks for updates on startup and will notify you when a new version is available.
+The GUI checks for updates on startup.
 
----
+### Linux
 
-## Install (Linux)
-
-Download the latest release from [GitHub Releases](https://github.com/hackrfstuff/prober/releases) and extract the archive:
+Download the Linux archive from [Releases](https://github.com/leszczy/prober/releases) and extract it:
 
 ```sh
 tar -xzf prober-x.x.x-linux.tar.gz
@@ -31,7 +30,8 @@ cd prober-x.x.x
 ./prober_gui
 ```
 
-**Serial port permissions:** Serial ports require group membership. Add your user and re-login:
+If you cannot access serial ports, add your user to the appropriate group, then log out and back in:
+
 ```sh
 # Arch
 sudo usermod -aG uucp $USER
@@ -39,82 +39,33 @@ sudo usermod -aG uucp $USER
 sudo usermod -aG dialout $USER
 ```
 
----
+## Flashing and configuration
 
-## Features
+The CLI can flash a local Intel HEX file or select the correct firmware from the bundled Bluejay releases using the ESC identity. Settings are preserved by default and can also be erased, migrated or changed in the same run.
 
-### Flashing
-- Flash one or all ESCs in a single run (`--index N` or `--all`)
-- Bundled Bluejay firmware auto-resolution from ESC identity (`--hex auto`)
-- Intel HEX file support with full address range handling
-- Post-flash verification: byte-level (`--verify full`), page CRC (`--verify fast`), or skip
-- EEPROM erase option (`--erase-eeprom`)
-- Full application erase before write (`--full-erase-app`, `--full-erase-entire-app`)
-- Dry-run mode for testing without writing (`--dry-run`)
-- Settings preservation across flashes (default), with optional erase or migrate
-- Inline settings overrides applied immediately after flash (`--set KEY=VALUE`)
+Firmware identity, version, layout, MCU and Bluejay settings can be read without flashing. The settings use the same field names as esc-configurator. Individual settings can be written separately, including timing, demag compensation, motor direction, PWM frequency, braking, EDT, beacon, temperature protection, power rating, LED control and the startup melody region.
 
-### Settings Read & Write
-- Read firmware identity, version, target layout, MCU, and all Bluejay settings from any ESC
-- Structured display output matching esc-configurator field names
-- Write individual settings without reflashing (`--write-settings --set KEY=VALUE`)
-- Supports all Bluejay EEPROM fields: timing, demag, direction, PWM frequency, braking, EDT, beacon, temperature protection, power rating, LED control, startup melody region, and more
-- Multi-round read with configurable retries and backoff for flaky links (`--read-rounds`, `--read-round-sleep-ms`)
+### AIO's
 
-### 4-in-1 / AIO Stability
-- **Automatic mapping resolution** — detects whether the FC uses 0-based or 1-based ESC indexing without user input. Two-phase scoring (quick discriminator + full probe) locks the mapping before any flash or read operation.
-- **Value-based warm-up** — wakes all ESC bootloaders before mapping is decided by sending raw selection values across both index ranges. No mapping assumption is made during warm-up.
-- **Direct-kick recovery** — if an ESC fails index-select but responds to direct addressing, the tool automatically kicks it via direct, resets, and retries index-select. Includes session rebuild (exit + re-enter 4-way) as a fallback. This runs during the reachability probe, during pre-flash warmup, and again at flash time — an ESC that is alive will not be skipped.
-- **Mode-aware reset** — `ExitBootloader` resets send the mode byte (2-byte format first) so the ESC actually releases the bus. Reset format is auto-detected and cached per session to avoid unnecessary bus traffic.
-- **Post-flash channel warm-up** — after each ESC is flashed, all channels are briefly re-woken to prevent the next ESC from being cold or stuck.
-- **Graceful degradation** — if an ESC is genuinely unreachable after all recovery attempts, it is skipped and the rest of the batch continues. Use `--skip-missing` to suppress the abort.
+Flight controllers can use either 0-based or 1-based ESC indexing in passthrough mode. prober wakes the ESC bootloaders using both ranges of selection values before determining the mapping. A quick check followed by a full probe is used to settle on a mapping before flashing or reading settings.
 
-### Probing & Diagnostics
-- `--probe-escs` — test reachability of all ESCs under the resolved mapping
-- `--probe-sweep` — sweep all selection values 0–255 to discover what the FC responds to
-- Direct-address probing for unreachable ESCs (addr 0x0004–0x0008)
-- Detailed selection reports: signature, mapping used, attempt count, direct vs index
-- `--trace` logging shows every 4-way transaction, reset strategy, capability cache state, and recovery decisions
+If an ESC responds to direct addressing but not to index selection, prober tries to wake it directly, resets it and retries selection. It can also exit and re-enter 4-way mode if needed. This recovery is attempted during probing, before flashing and when selecting an ESC to flash.
 
-### C2 Flashing (SiLabs direct)
-- Flash Bluejay onto bare SiLabs MCUs via an Arduino-based C2 interface
-- `--c2-install` — upload the C2 interface firmware to an Arduino Uno or Nano (via avrdude)
-- `--c2-detect` — check if the C2 interface is present
-- `--c2-read-info` — read SiLabs device ID and revision
-- `--c2-erase` — erase the target MCU
-- `--c2-write-hex` — write a hex file to the target
-- `--c2-reset` — reset the target
+The `ExitBootloader` command tries the two-byte reset format with the mode byte first. The working format is remembered for the rest of the session so the ESC can release the bus without unnecessary retries. After flashing each ESC, all channels are woken again before moving on to the next one.
 
-### GUI
-- Qt-based interface with real-time progress, per-ESC status, and settings editor
-- NDJSON IPC protocol between GUI and CLI backend (`--ui-json`)
-- Serial port auto-detection and selection
+Use `--skip-missing` to continue a batch if an ESC still cannot be reached after recovery attempts.
 
----
+### Probing
 
-## CLI Reference
+Use `--probe-escs` to check which ESCs can be reached with the selected mapping, or `--probe-sweep` to check all selection values from 0 to 255. The probe can also try direct addresses from `0x0004` to `0x0008` for ESCs that do not respond to index selection.
 
-### Basic Usage
+Probe reports include the device signature, mapping, number of attempts and whether direct addressing or index selection was used. Use `--trace` to log the individual 4-way transactions, reset formats, cached capabilities and recovery attempts.
 
-```sh
-# Flash all ESCs
-prober --port COM5 --hex firmware.hex --all --verify
+### C2 flashing
 
-# Flash one ESC (1-based index)
-prober --port COM5 --hex firmware.hex --index 2 --verify fast
+An Arduino Uno or Nano can be used as a C2 interface to flash Bluejay directly onto a SiLabs MCU, without FC passthrough. The interface firmware can be uploaded with `--c2-install` using avrdude. C2 mode supports interface detection, reading the target's device ID and revision, erasing, writing a HEX file and resetting the target. See the C2 options below.
 
-# Auto-resolve Bluejay firmware from ESC identity
-prober --port COM5 --hex auto --all --verify
-
-# Read settings from all ESCs
-prober --port COM5 --read --all
-
-# Write a setting to all ESCs
-prober --port COM5 --write-settings --all --set BRAKE_ON_STOP=On
-
-# Flash + apply settings in one pass
-prober --port COM5 --hex firmware.hex --all --verify --set MOTOR_DIRECTION=2
-```
+## CLI reference
 
 ### Connection
 
@@ -124,10 +75,10 @@ prober --port COM5 --hex firmware.hex --all --verify --set MOTOR_DIRECTION=2
 | `--baud N` | 115200 | Baud rate |
 | `--timeout S` | 1.0 | 4-way response timeout (seconds) |
 | `--delay S` | 0.0 | Inter-byte delay |
-| `--safe` | off | BB51 safe defaults (timeout=6s, delay=0.01s) |
+| `--safe` | off | Use a 6 second timeout and 0.01 second delay for BB51 ESCs |
 | `--list-ports` | | List available serial ports and exit |
 
-### Target Selection
+### ESC selection
 
 | Flag | Description |
 |------|-------------|
@@ -136,12 +87,12 @@ prober --port COM5 --hex firmware.hex --all --verify --set MOTOR_DIRECTION=2
 | `--mapping MODE` | `auto`, `strict-0-based`, `strict-1-based`, `prefer-0-based`, `prefer-1-based` |
 | `--skip-missing` | Continue batch even if some ESCs are unreachable |
 
-### Flash Options
+### Flashing
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--hex PATH` | required | Hex file path, or `auto` for bundled Bluejay |
-| `--verify [full\|fast\|off]` | off | Post-flash verification mode |
+| `--verify [full\|fast\|off]` | off | Verify by byte (`full`), by page CRC (`fast`), or skip (`off`) |
 | `--erase-eeprom` | off | Erase EEPROM (settings) during flash |
 | `--full-erase-app` | off | Erase full application area before write |
 | `--full-erase-entire-app` | off | Erase entire application region |
@@ -153,43 +104,43 @@ prober --port COM5 --hex firmware.hex --all --verify --set MOTOR_DIRECTION=2
 | `--bluejay-version VER` | 0.21.0 | Bluejay version for `--hex auto` |
 | `--bluejay-dir PATH` | | Override firmware search directory |
 
-### Read & Write Settings
+### Reading and writing settings
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--read` | | Read and display ESC settings |
-| `--read-rounds N` | 2 | Retry rounds for flaky reads |
-| `--read-round-sleep-ms N` | 150 | Sleep between read rounds |
+| `--read-rounds N` | 2 | Number of read rounds |
+| `--read-round-sleep-ms N` | 150 | Delay between read rounds (ms) |
 | `--write-settings` | | Write settings without reflashing |
 | `--set KEY=VALUE` | | Setting to write (repeatable) |
 
-### Probe & Debug
+### Probing and debugging
 
 | Flag | Description |
 |------|-------------|
 | `--probe-escs` | Probe reachability of all ESCs |
-| `--probe-sweep` | Sweep all selection values 0–255 |
+| `--probe-sweep` | Sweep all selection values 0-255 |
 | `--probe-tries N` | Attempts per probe (default: 6) |
-| `--probe-sleep S` | Sleep between probe attempts (default: 0.15) |
-| `--settle-ms N` | Post-passthrough settle time (default: 200) |
+| `--probe-sleep S` | Delay between probe attempts in seconds (default: 0.15) |
+| `--settle-ms N` | Delay after entering passthrough in ms (default: 200) |
 | `--trace` | Enable detailed 4-way transaction logging |
 | `--loglevel LEVEL` | `INFO`, `DEBUG`, or `TRACE` |
 
-### Flash Timing (advanced)
+### Flash timing
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--flash-inter-esc-ms N` | 250 | Delay between ESCs in batch flash |
-| `--flash-preselect-tries N` | 2 | Warmup selection attempts before flash |
-| `--flash-preselect-sleep-ms N` | 150 | Sleep between preselect retries |
-| `--flash-post-select-ms N` | 200 | Settle after selection |
+| `--flash-inter-esc-ms N` | 250 | Delay between ESCs (ms) |
+| `--flash-preselect-tries N` | 2 | Selection attempts before flashing |
+| `--flash-preselect-sleep-ms N` | 150 | Delay between selection attempts (ms) |
+| `--flash-post-select-ms N` | 200 | Delay after selection (ms) |
 | `--flash-erase-retries N` | 3 | Page erase retry count |
-| `--flash-erase-inter-page-ms N` | 50 | Delay between page erases |
+| `--flash-erase-inter-page-ms N` | 50 | Delay between page erases (ms) |
 | `--flash-write-retries N` | 3 | Write block retry count |
-| `--flash-write-inter-block-ms N` | 10 | Delay between write blocks |
+| `--flash-write-inter-block-ms N` | 10 | Delay between write blocks (ms) |
 | `--verify-read-retries N` | 3 | Verification read retry count |
 
-### C2 Mode
+### C2 mode
 
 | Flag | Description |
 |------|-------------|
@@ -202,74 +153,75 @@ prober --port COM5 --hex firmware.hex --all --verify --set MOTOR_DIRECTION=2
 | `--c2-erase` | Erase target MCU |
 | `--c2-write-hex PATH` | Write hex file to target |
 | `--c2-reset` | Reset target |
-| `--c2-timeout-ms N` | C2 command timeout (default: 2000) |
-| `--c2-connect-delay-ms N` | Wait after opening port (default: 2000) |
+| `--c2-timeout-ms N` | C2 command timeout in ms (default: 2000) |
+| `--c2-connect-delay-ms N` | Delay after opening the port in ms (default: 2000) |
 
 ### Output
 
 | Flag | Description |
 |------|-------------|
 | `--json` | JSON output for `--list-ports` |
-| `--ui-json` | NDJSON event stream for GUI integration |
+| `--ui-json` | NDJSON event stream used by the GUI to communicate with the CLI |
 
----
+## Settings
 
-## Settable Keys
-
-Use with `--set KEY=VALUE` (for `--write-settings` or inline with flash):
+Use `--set KEY=VALUE` with `--write-settings` or when flashing. The option can be repeated to change multiple settings.
 
 | Key | Range | Notes |
 |-----|-------|-------|
-| `STARTUP_POWER_MIN` | 1000–1125 | Display value (µs) |
-| `STARTUP_POWER_MAX` | 1004–1300 | Display value (µs) |
-| `COMMUTATION_TIMING` | 1–5 | 1=Low … 5=High |
-| `DEMAG_COMPENSATION` | 1–3 | 1=Off, 2=Low, 3=High |
-| `RPM_POWER_SLOPE` | 0–13 | |
-| `BEEP_STRENGTH` | 0–255 | |
-| `BEACON_STRENGTH` | 0–255 | |
-| `BEACON_DELAY` | 1–5 | |
-| `POWER_RATING` | 1–2 | 1=1S, 2=2S+ |
-| `TEMPERATURE_PROTECTION` | 0–7 | |
+| `STARTUP_POWER_MIN` | 1000-1125 | Display value (µs) |
+| `STARTUP_POWER_MAX` | 1004-1300 | Display value (µs) |
+| `COMMUTATION_TIMING` | 1-5 | 1 = Low, 5 = High |
+| `DEMAG_COMPENSATION` | 1-3 | 1 = Off, 2 = Low, 3 = High |
+| `RPM_POWER_SLOPE` | 0-13 | |
+| `BEEP_STRENGTH` | 0-255 | |
+| `BEACON_STRENGTH` | 0-255 | |
+| `BEACON_DELAY` | 1-5 | |
+| `POWER_RATING` | 1-2 | 1 = 1S, 2 = 2S+ |
+| `TEMPERATURE_PROTECTION` | 0-7 | |
 | `FORCE_EDT_ARM` | On / Off | |
 | `BRAKE_ON_STOP` | On / Off | |
-| `BRAKING_STRENGTH` | 0–255 | |
-| `MOTOR_DIRECTION` | 1–4 | |
-| `LED_CONTROL` | 0–4 | |
-| `STARTUP_BEEP` | 0–3 | |
+| `BRAKING_STRENGTH` | 0-255 | |
+| `MOTOR_DIRECTION` | 1-4 | |
+| `LED_CONTROL` | 0-4 | |
+| `STARTUP_BEEP` | 0-3 | |
 | `DITHERING` | On / Off | |
-| `PWM_FREQUENCY` | 0 / 24 / 48 / 96 | 0=Dynamic |
+| `PWM_FREQUENCY` | 0 / 24 / 48 / 96 | 0 = Dynamic |
 
----
-
-## Build
+## Building
 
 ### Linux
 
 Requires `cmake`, `ninja`, a C++17 compiler, and Qt 6 for the GUI.
 
 On Arch:
+
 ```sh
 sudo pacman -S cmake ninja gcc qt6-base
 ```
 
 On Ubuntu/Debian:
+
 ```sh
 sudo apt install cmake ninja-build g++ qt6-base-dev
 ```
 
-**CLI only:**
+To build the CLI:
+
 ```sh
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ./build/prober --list-ports
 ```
 
-**CLI + GUI — packaged distribution:**
+To build and package both the CLI and GUI:
+
 ```sh
 ./scripts/package_linux.sh
 ```
 
 Output goes to `dist/`:
+
 ```
 dist/
   prober
@@ -281,51 +233,54 @@ dist/
 ```
 
 Run the GUI:
+
 ```sh
 ./dist/prober_gui
 ```
 
----
-
 ### Windows (native)
 
-Requires Visual Studio 2022+, CMake, Ninja, and Qt 6.x.
+Requires Visual Studio 2022 or newer, CMake and Ninja, with Qt 6 for the GUI.
 
-**CLI only:**
+To build the CLI:
+
 ```sh
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
-**CLI + GUI:**
+To build both the CLI and GUI:
+
 ```sh
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="C:/Qt/6.x.x/msvc2022_64"
 cmake --build build -j
 ```
 
-**Packaged distribution + installer:**
+To build the distribution and installer:
+
 ```sh
 .\scripts\package_windows.ps1 -QtPath "C:\Qt\6.x.x\msvc2022_64"
 ```
 
 Or via the `.cmd` wrapper:
+
 ```sh
 .\scripts\package_windows.cmd -QtPath "C:\Qt\6.x.x\msvc2022_64"
 ```
 
----
+### Cross-compiling for Windows on Linux
 
-### Windows (cross-compile from Linux)
-
-Requires `mingw-w64` toolchain, `mingw-w64-qt6-base` (AUR on Arch), and `nsis` for the installer.
+Requires a `mingw-w64` toolchain, `mingw-w64-qt6-base` (AUR on Arch) and `nsis` for the installer.
 
 On Arch:
+
 ```sh
 sudo pacman -S mingw-w64-gcc
 yay -S mingw-w64-qt6-base nsis
 ```
 
 Build and package:
+
 ```sh
 ./scripts/package_windows_cross.sh
 ```
@@ -344,23 +299,19 @@ dist/
     bluejay_firmware/
 ```
 
----
+## Third-party components
 
-## Bundled Tools & Attribution
-
-The `tools/` directory contains third-party binaries and firmware bundled for ease of installation. This allows the application to work out-of-the-box without requiring users to manually download and configure external dependencies.
+The `tools/` directory contains the firmware and external tools shipped with prober. CSerialPort is used when building the application.
 
 | Component | Path | Source | License |
 |-----------|------|--------|---------|
-| **Bluejay firmware** | `tools/bluejay_firmware/` | [bird-sanctuary/bluejay](https://github.com/bird-sanctuary/bluejay) | GPL-3.0 |
-| **avrdude** | `tools/avrdude/` | [avrdudes/avrdude](https://github.com/avrdudes/avrdude) | GPL-2.0 |
-| **C2 firmware** | `tools/c2_firmware/` | [stylesuxx/arduino-c2-flasher](https://github.com/stylesuxx/arduino-c2-flasher) | GPL-3.0 |
-| **CSerialPort** | (build dependency) | [itas109/CSerialPort](https://github.com/itas109/CSerialPort) | LGPL-3.0 |
+| Bluejay firmware | `tools/bluejay_firmware/` | [bird-sanctuary/bluejay](https://github.com/bird-sanctuary/bluejay) | GPL-3.0 |
+| avrdude | `tools/avrdude/` | [avrdudes/avrdude](https://github.com/avrdudes/avrdude) | GPL-2.0 |
+| C2 firmware | `tools/c2_firmware/` | [stylesuxx/arduino-c2-flasher](https://github.com/stylesuxx/arduino-c2-flasher) | GPL-3.0 |
+| CSerialPort | (build dependency) | [itas109/CSerialPort](https://github.com/itas109/CSerialPort) | LGPL-3.0 |
 
-Bluejay hex files are byte-identical copies from [official releases](https://github.com/bird-sanctuary/bluejay/releases). Use `--hex <path>` to flash any hex file you trust.
-
----
+The bundled Bluejay HEX files are unmodified copies from the [official releases](https://github.com/bird-sanctuary/bluejay/releases). You can also use your own firmware with `--hex PATH`.
 
 ## License
 
-This project is licensed under the [GNU Affero General Public License v3.0](LICENSE).
+Project code is licensed under the [GNU AGPLv3](LICENSE). Third-party components retain their respective licenses.
